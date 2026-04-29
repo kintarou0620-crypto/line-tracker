@@ -55,64 +55,68 @@
     const LINE_ADD_URL = 'https://line.me/R/ti/p/@095ulijt';
     // =============================================
 
-    async function main() {
-      try {
-        // LIFF初期化
-        await liff.init({ liffId: LIFF_ID });
+     // ★ ログイン前にrouteを保存しておく（リダイレクトで消えても復元できるように）
+  const initialParams = new URLSearchParams(location.search);
+  const routeFromUrl = initialParams.get('route');
+  if (routeFromUrl) {
+    sessionStorage.setItem('liff_route', routeFromUrl);
+  }
 
-        // 未ログインならログイン処理（ここで自動的に友だち追加プロンプトも出る）
-        if (!liff.isLoggedIn()) {
-          liff.login();
-          return;
-        }
+  async function main() {
+    try {
+      await liff.init({ liffId: LIFF_ID });
 
-        // クエリパラメータから経路を取得
-        const params = new URLSearchParams(location.search);
-        const route = params.get('route') || 'unknown';
-
-        // ユーザー情報取得
-        const profile = await liff.getProfile();
-
-        // GASに追跡データを送信
-        await fetch(GAS_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({
-            type: 'track',
-            userId: profile.userId,
-            route: route
-          })
-        });
-
-        // 友だち状態をチェック
-        const friendship = await liff.getFriendship();
-
-        if (!friendship.friendFlag) {
-          // 未追加 → 友だち追加URLへ誘導
-          document.getElementById('message').innerText = '友だち追加ページに移動します...';
-          setTimeout(() => {
-            location.href = LINE_ADD_URL;
-          }, 1500);
-        } else {
-          // 既に友だち → 完了表示
-          document.getElementById('spinner').style.display = 'none';
-          document.getElementById('message').innerText =
-            'すでにお友だちです！\nLINEアプリに戻ってください。';
-          // LIFFを閉じる（LINEアプリ内で開かれている場合）
-          setTimeout(() => {
-            if (liff.isInClient()) liff.closeWindow();
-          }, 2000);
-        }
-
-      } catch (err) {
-        document.getElementById('spinner').style.display = 'none';
-        document.getElementById('message').innerText = 'エラーが発生しました';
-        document.getElementById('error').innerText = err.message || err.toString();
-        console.error(err);
+      if (!liff.isLoggedIn()) {
+        liff.login();
+        return;
       }
-    }
 
-    main();
-  </script>
+      const profile = await liff.getProfile();
+
+      // ★ URLとsessionStorageの両方からrouteを取得
+      const params = new URLSearchParams(location.search);
+      const route = params.get('route') 
+                    || sessionStorage.getItem('liff_route') 
+                    || 'unknown';
+
+      // 使ったらクリア（次回のテストで残らないように）
+      sessionStorage.removeItem('liff_route');
+
+      await fetch(GAS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          type: 'track',
+          userId: profile.userId,
+          route: route
+        })
+      });
+
+      const friendship = await liff.getFriendship();
+
+      if (!friendship.friendFlag) {
+        document.getElementById('message').innerText = '友だち追加ページに移動します...';
+        setTimeout(() => {
+          location.href = LINE_ADD_URL;
+        }, 1500);
+      } else {
+        document.getElementById('spinner').style.display = 'none';
+        document.getElementById('message').innerText =
+          'すでにお友だちです！\nLINEアプリに戻ってください。';
+        setTimeout(() => {
+          if (liff.isInClient()) liff.closeWindow();
+        }, 2000);
+      }
+
+    } catch (err) {
+      document.getElementById('spinner').style.display = 'none';
+      document.getElementById('message').innerText = 'エラーが発生しました';
+      document.getElementById('error').innerText = err.message || err.toString();
+      console.error(err);
+    }
+  }
+
+  main();
+</script>
 </body>
 </html>
